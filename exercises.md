@@ -366,19 +366,19 @@ verbosity bias và self-preference bằng cách nào?
 Chỉ làm sau khi hoàn thành 3.1–3.3. Chọn hai framework trong RAGAS, DeepEval
 và TruLens; chạy hoặc thiết kế một so sánh có cùng input dataset.
 
-| Tiêu chí | Framework 1: ____ | Framework 2: ____ |
+| Tiêu chí | Framework 1: RAGAS-style offline RAG metrics | Framework 2: DeepEval-style LLM unit tests |
 |---|---|---|
-| Setup complexity | | |
-| Metrics available | | |
-| CI/CD integration | | |
-| Kết quả trên cùng dataset | | |
-| Insight rút ra | | |
+| Setup complexity | Low in this lab because `template.py` already implements lexical versions of Faithfulness, Answer Relevance, Context Recall, Context Precision, and Completeness. A production RAGAS setup would require dataset objects, model/embedding config, and evaluator credentials. | Medium. DeepEval would require converting each OrbitTech QA into test cases with input, actual output, expected output, retrieval context, and assertions. It is more explicit but needs more rubric/test configuration. |
+| Metrics available | Strong for RAG diagnostics: context recall, context precision, faithfulness, answer relevance, and answer/expected overlap. Best at separating retrieval quality from generation quality. | Strong for pass/fail quality gates: faithfulness assertions, answer relevancy, hallucination checks, and custom GEval rubrics for safety/privacy, policy-version correctness, and completeness. |
+| CI/CD integration | Good for aggregate release reports. In this run, it produced a 20-case benchmark, pass rate, metric averages, and failure distribution. | Very good for blocking deployments because each test can be an explicit assertion, for example “no prompt-injection leak,” “must not advise using a smoking device,” or “return-policy version must be correct.” |
+| Kết quả trên cùng dataset | Actual run: pass rate 65.0%; Avg Context Recall 0.900; Avg Context Precision 0.941; Avg Faithfulness 0.692; Avg Relevance 0.725; Avg Completeness 0.616. Worst cases: A01, A02, A03. | Designed on the same 20 inputs: likely stricter on H01 because the actual answer used the wrong return-policy version even though lexical scores still passed it; likely more forgiving on A01/A02 safe refusals if the rubric checks behavior rather than word overlap. Worst cases would include H01 and A03, plus A01 if the rubric requires OrbitTech scope framing. |
+| Insight rút ra | RAGAS-style metrics are excellent for spotting that retrieval is usually strong but A01 lacks scope context and A03 has weak safety-context ranking. However, word overlap can mark safe refusals as hallucinations. | DeepEval-style tests are better for domain-specific correctness and safety. They can catch policy-version errors and judge refusals by behavior, but they provide less direct retrieval-ranking diagnosis unless retrieval metrics are also included. |
 
 - Scores có nhất quán không?
 - Framework nào strict hơn và vì sao?
 - Hai framework có tìm ra cùng failure cases không?
 
-> *Phân tích:*
+> *Phân tích:* Scores are partly consistent: both approaches would flag A03 because the answer is incomplete and safety evidence ranking is weak. They diverge on A01/A02 and H01. The RAGAS-style lexical benchmark marks A01/A02 as low because the refusal wording does not overlap enough with the expected policy language, while a DeepEval GEval rubric could recognize the behavior as mostly safe. Conversely, RAGAS-style scoring lets H01 pass with Overall 0.671 even though the actual answer says version 2.0 and a 45-day window; a DeepEval policy-version assertion should fail it hard. DeepEval is stricter for business-critical policy correctness, while RAGAS-style metrics are better for diagnosing retrieval vs generation. The two frameworks find overlapping but not identical failure cases, so I would use both: RAGAS-style metrics for offline RAG health and DeepEval-style tests as CI/CD deployment gates for safety, privacy, refund, warranty, and policy-version rules.
 
 ### Exercise 3.5 — Retrieval Reranking (Bonus +5)
 
@@ -393,20 +393,24 @@ thay đổi Context Recall hay không.
 
 | ID | Recall before | Recall after | Precision before | Precision after | Delta Precision |
 |---|---:|---:|---:|---:|---:|
-| | | | | | |
-| | | | | | |
-| | | | | | |
-| | | | | | |
-| | | | | | |
-| **Avg** | | | | | |
+| A03 | 0.739 | 0.739 | 0.417 | 1.000 | +0.583 |
+| H05 | 0.952 | 0.952 | 0.804 | 1.000 | +0.196 |
+| M02 | 0.957 | 0.957 | 0.887 | 1.000 | +0.113 |
+| A02 | 0.944 | 0.944 | 0.867 | 1.000 | +0.133 |
+| E02 | 0.941 | 0.941 | 0.950 | 1.000 | +0.050 |
+| **Avg** | 0.907 | 0.907 | 0.785 | 1.000 | +0.215 |
 
 **Tại sao Recall dự kiến không đổi?**
 
 > *Câu trả lời:*
+>
+> Recall không đổi vì reranking chỉ thay đổi thứ tự của cùng một tập retrieved chunks. Context Recall dùng union của toàn bộ chunk tokens để đo coverage của expected answer, nên khi không thêm hoặc xóa chunk nào, tập token evidence vẫn giữ nguyên.
 
 **Khi nào reranking không đủ và cần sửa retriever/query/chunking?**
 
 > *Câu trả lời:*
+>
+> Reranking không đủ khi evidence cần thiết hoàn toàn không nằm trong retrieved set, khi query không chứa đủ tín hiệu để tìm đúng policy, hoặc khi chunking làm một rule bị tách khỏi exception/effective date của nó. Khi đó cần sửa retriever/query expansion/chunking, ví dụ thêm scope classifier cho adversarial requests, tăng top-k, hoặc chunk theo policy section thay vì paragraph rời.
 
 ---
 
